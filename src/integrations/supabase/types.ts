@@ -14,7 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      evaluations: {
+        Row: {
+          created_at: string
+          faisabilite: number
+          id: string
+          impact: number
+          innovation: number
+          jury_name: string
+          pitch: number
+          project_name: string
+          project_number: number
+          prototype: number
+          questions: number
+        }
+        Insert: {
+          created_at?: string
+          faisabilite?: number
+          id?: string
+          impact?: number
+          innovation?: number
+          jury_name: string
+          pitch?: number
+          project_name?: string
+          project_number: number
+          prototype?: number
+          questions?: number
+        }
+        Update: {
+          created_at?: string
+          faisabilite?: number
+          id?: string
+          impact?: number
+          innovation?: number
+          jury_name?: string
+          pitch?: number
+          project_name?: string
+          project_number?: number
+          prototype?: number
+          questions?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
