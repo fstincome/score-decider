@@ -9,5 +9,17 @@ export const CRITERIA = [
 
 export type CriterionKey = (typeof CRITERIA)[number]["key"];
 
-export const PROJECT_COUNT = 10;
-export const JURY_NAMES = ["Juré 1", "Juré 2", "Juré 3"] as const;
+export const PROJECT_NAMES = [
+  "Turiho",
+  "Gitega Street Marketing",
+  "Echo Creative Studio",
+  "Burundi e-Market",
+  "Kwiga Design",
+  "Ingoma Creative Hub",
+  "Marketing Solutions Agency",
+  "Gitega Influencers Network",
+] as const;
+
+export const PROJECT_COUNT = PROJECT_NAMES.length;
+export const JURY_NAMES = ["Juré 1", "Juré 2 (Président)", "Juré 3"] as const;
+export const PRESIDENT_JURY = JURY_NAMES[1];
