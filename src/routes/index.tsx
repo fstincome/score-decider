@@ -12,12 +12,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  CRITERIA,
-  JURY_NAMES,
-  PROJECT_COUNT,
-  PROJECT_NAMES,
-} from "@/lib/scoring";
+import { CRITERIA, JURY_NAMES } from "@/lib/scoring";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -26,7 +21,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Classement combiné en temps réel des 8 projets — Marketing Digital Competition.",
+          "Classement combiné en temps réel — Marketing Digital Competition.",
       },
     ],
   }),
@@ -46,18 +41,27 @@ type Eval = {
   questions: number;
   created_at: string;
 };
+type Project = { project_number: number; name: string };
 
 const PRIMARY_JURY = JURY_NAMES[0];
 
 function Index() {
   const [evals, setEvals] = useState<Eval[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [locked, setLocked] = useState(false);
 
   useEffect(() => {
-    const load = async () => {
+    const loadEvals = async () => {
       const { data } = await supabase.from("evaluations").select("*");
       if (data) setEvals(data as Eval[]);
+    };
+    const loadProjects = async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("project_number");
+      if (data) setProjects(data as Project[]);
     };
     const loadLock = async () => {
       const { data } = await supabase
@@ -67,14 +71,20 @@ function Index() {
         .maybeSingle();
       if (data) setLocked(!!data.locked);
     };
-    load();
+    loadEvals();
+    loadProjects();
     loadLock();
     const ch = supabase
-      .channel("eval-live")
+      .channel("dash-live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "evaluations" },
-        load,
+        loadEvals,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        loadProjects,
       )
       .on(
         "postgres_changes",
@@ -87,19 +97,17 @@ function Index() {
     };
   }, []);
 
-  const aggregated = Array.from({ length: PROJECT_COUNT }, (_, i) => {
-    const num = i + 1;
-    const rows = evals.filter((e) => e.project_number === num);
+  const aggregated = projects.map((p) => {
+    const rows = evals.filter((e) => e.project_number === p.project_number);
     const primaryRow = rows.find((r) => r.jury_name === PRIMARY_JURY);
-    const name =
-      primaryRow?.project_name?.trim() || PROJECT_NAMES[i] || `Projet ${num}`;
+    const name = primaryRow?.project_name?.trim() || p.name || `Projet ${p.project_number}`;
     const totals = rows.map((r) =>
       CRITERIA.reduce((s, c) => s + Number(r[c.key as keyof Eval] || 0), 0),
     );
     const submitted = totals.length;
     const sum = totals.reduce((s, t) => s + t, 0);
     const avg = submitted ? sum / submitted : 0;
-    return { num, name, rows, submitted, avg };
+    return { num: p.project_number, name, submitted, avg };
   });
 
   const ranking = [...aggregated]
@@ -149,7 +157,8 @@ function Index() {
           <div className="border-b px-5 py-3">
             <h2 className="text-lg font-semibold">Classement</h2>
             <p className="text-xs text-muted-foreground">
-              Trié sur la moyenne des totaux des jurés · {PROJECT_COUNT} projets
+              Trié sur la moyenne des totaux des jurés · {projects.length} équipe
+              {projects.length > 1 ? "s" : ""}
             </p>
           </div>
           <div className="divide-y">
@@ -235,11 +244,7 @@ function Index() {
                           <td className="px-3 py-2 font-mono text-muted-foreground">
                             {e.project_number}
                           </td>
-                          <td className="px-3 py-2">
-                            {e.project_name ||
-                              PROJECT_NAMES[e.project_number - 1] ||
-                              "—"}
-                          </td>
+                          <td className="px-3 py-2">{e.project_name || "—"}</td>
                           {CRITERIA.map((c) => (
                             <td key={c.key} className="px-2 py-2 text-center tabular-nums">
                               {Number(e[c.key as keyof Eval] || 0)}
