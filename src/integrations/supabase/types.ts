@@ -56,6 +56,24 @@ export type Database = {
         }
         Relationships: []
       }
+      projects: {
+        Row: {
+          created_at: string
+          name: string
+          project_number: number
+        }
+        Insert: {
+          created_at?: string
+          name?: string
+          project_number: number
+        }
+        Update: {
+          created_at?: string
+          name?: string
+          project_number?: number
+        }
+        Relationships: []
+      }
       session_settings: {
         Row: {
           id: number

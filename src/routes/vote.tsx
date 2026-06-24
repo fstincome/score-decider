@@ -1,19 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, Send, Lock, Unlock, Megaphone } from "lucide-react";
+import {
+  ArrowLeft,
+  Check,
+  Send,
+  Lock,
+  Unlock,
+  Megaphone,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  CRITERIA,
-  JURY_NAMES,
-  PROJECT_COUNT,
-  PROJECT_NAMES,
-  PRESIDENT_JURY,
-} from "@/lib/scoring";
+import { CRITERIA, JURY_NAMES, PRESIDENT_JURY } from "@/lib/scoring";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/vote")({
@@ -26,25 +29,28 @@ export const Route = createFileRoute("/vote")({
   component: Vote,
 });
 
+type Project = { project_number: number; name: string };
 type Row = {
+  project_number: number;
   project_name: string;
   scores: Record<string, string>;
 };
 
-const emptyRows = (): Row[] =>
-  Array.from({ length: PROJECT_COUNT }, (_, i) => ({
-    project_name: PROJECT_NAMES[i] ?? `Projet ${i + 1}`,
-    scores: Object.fromEntries(CRITERIA.map((c) => [c.key, ""])),
-  }));
+const emptyScores = () =>
+  Object.fromEntries(CRITERIA.map((c) => [c.key, ""])) as Record<string, string>;
 
 function Vote() {
   const [jury, setJury] = useState<string>("");
-  const [rows, setRows] = useState<Row[]>(emptyRows());
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [adding, setAdding] = useState(false);
 
   const isPresident = jury === PRESIDENT_JURY;
 
+  // Load lock + projects + subscribe
   useEffect(() => {
     const loadLock = async () => {
       const { data } = await supabase
@@ -54,13 +60,26 @@ function Vote() {
         .maybeSingle();
       if (data) setLocked(!!data.locked);
     };
+    const loadProjects = async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("*")
+        .order("project_number");
+      if (data) setProjects(data as Project[]);
+    };
     loadLock();
+    loadProjects();
     const ch = supabase
-      .channel("session-lock-vote")
+      .channel("vote-live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "session_settings" },
         loadLock,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "projects" },
+        loadProjects,
       )
       .subscribe();
     return () => {
@@ -68,34 +87,45 @@ function Vote() {
     };
   }, []);
 
+  // Rebuild rows when projects or jury change
   useEffect(() => {
-    if (!jury) return;
+    if (!jury || projects.length === 0) {
+      setRows([]);
+      return;
+    }
     (async () => {
-      const { data } = await supabase
+      const { data: evalRows } = await supabase
         .from("evaluations")
         .select("*")
         .eq("jury_name", jury);
-      const next = emptyRows();
-      (data ?? []).forEach((d) => {
-        const i = d.project_number - 1;
-        if (i < 0 || i >= PROJECT_COUNT) return;
-        next[i] = {
-          project_name: d.project_name?.trim() || PROJECT_NAMES[i] || `Projet ${i + 1}`,
-          scores: Object.fromEntries(
-            CRITERIA.map((c) => [c.key, String(d[c.key as keyof typeof d] ?? "")]),
-          ),
+      const byNum = new Map<number, any>();
+      (evalRows ?? []).forEach((d: any) => byNum.set(d.project_number, d));
+      const next: Row[] = projects.map((p) => {
+        const ev = byNum.get(p.project_number);
+        return {
+          project_number: p.project_number,
+          project_name: ev?.project_name?.trim() || p.name || `Projet ${p.project_number}`,
+          scores: ev
+            ? Object.fromEntries(
+                CRITERIA.map((c) => [c.key, String(ev[c.key] ?? "")]),
+              )
+            : emptyScores(),
         };
       });
       setRows(next);
     })();
-  }, [jury]);
+  }, [jury, projects]);
 
-  const update = (i: number, key: string, value: string) =>
+  const update = (num: number, key: string, value: string) =>
     setRows((rs) =>
-      rs.map((r, idx) => (idx === i ? { ...r, scores: { ...r.scores, [key]: value } } : r)),
+      rs.map((r) =>
+        r.project_number === num ? { ...r, scores: { ...r.scores, [key]: value } } : r,
+      ),
     );
-  const updateName = (i: number, value: string) =>
-    setRows((rs) => rs.map((r, idx) => (idx === i ? { ...r, project_name: value } : r)));
+  const updateName = (num: number, value: string) =>
+    setRows((rs) =>
+      rs.map((r) => (r.project_number === num ? { ...r, project_name: value } : r)),
+    );
 
   const totalOf = (r: Row) =>
     CRITERIA.reduce((s, c) => {
@@ -110,10 +140,10 @@ function Vote() {
       return;
     }
     setSaving(true);
-    const payload = rows.map((r, i) => ({
+    const payload = rows.map((r) => ({
       jury_name: jury,
-      project_number: i + 1,
-      project_name: r.project_name?.trim() || PROJECT_NAMES[i] || `Projet ${i + 1}`,
+      project_number: r.project_number,
+      project_name: r.project_name?.trim() || `Projet ${r.project_number}`,
       ...Object.fromEntries(
         CRITERIA.map((c) => {
           const v = parseFloat(r.scores[c.key] || "0");
@@ -121,16 +151,12 @@ function Vote() {
         }),
       ),
     }));
-
     const { error } = await supabase
       .from("evaluations")
       .upsert(payload, { onConflict: "jury_name,project_number" });
     setSaving(false);
-    if (error) {
-      toast.error("Erreur d'envoi : " + error.message);
-    } else {
-      toast.success(`Notes envoyées ✓ (${payload.length} projets)`);
-    }
+    if (error) toast.error("Erreur d'envoi : " + error.message);
+    else toast.success(`Notes envoyées ✓ (${payload.length} projets)`);
   };
 
   const toggleLock = async () => {
@@ -139,12 +165,40 @@ function Vote() {
       .from("session_settings")
       .update({ locked: next, updated_at: new Date().toISOString() })
       .eq("id", 1);
-    if (error) {
-      toast.error("Erreur : " + error.message);
-      return;
-    }
+    if (error) return toast.error("Erreur : " + error.message);
     setLocked(next);
     toast.success(next ? "Session clôturée — résultats proclamés 🏆" : "Modifications rouvertes");
+  };
+
+  const addProject = async () => {
+    const name = newName.trim();
+    if (!name) return toast.error("Indiquez un nom d'équipe.");
+    if (locked) return toast.error("Session clôturée.");
+    setAdding(true);
+    const nextNum =
+      projects.reduce((m, p) => Math.max(m, p.project_number), 0) + 1;
+    const { error } = await supabase
+      .from("projects")
+      .insert({ project_number: nextNum, name });
+    setAdding(false);
+    if (error) return toast.error("Erreur : " + error.message);
+    setNewName("");
+    toast.success(`Équipe ajoutée : ${name} (n°${nextNum})`);
+  };
+
+  const removeProject = async (num: number, name: string) => {
+    if (!confirm(`Supprimer l'équipe « ${name} » (n°${num}) et toutes ses notes ?`)) return;
+    const { error: e1 } = await supabase
+      .from("evaluations")
+      .delete()
+      .eq("project_number", num);
+    if (e1) return toast.error("Erreur notes : " + e1.message);
+    const { error: e2 } = await supabase
+      .from("projects")
+      .delete()
+      .eq("project_number", num);
+    if (e2) return toast.error("Erreur : " + e2.message);
+    toast.success("Équipe supprimée");
   };
 
   if (!jury) {
@@ -195,7 +249,8 @@ function Vote() {
               Mes notes — {jury}
             </h1>
             <p className="text-xs opacity-90">
-              Marketing Digital Competition · 8 projets · noté sur 100
+              Marketing Digital Competition · {projects.length} projet
+              {projects.length > 1 ? "s" : ""} · noté sur 100
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -229,14 +284,44 @@ function Vote() {
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6">
         {locked && (
-          <div className="mb-4 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <Lock className="h-4 w-4" />
-            Les modifications sont clôturées par le Président. Les notes ne sont
-            plus modifiables.
+            Les modifications sont clôturées par le Président.
           </div>
         )}
+
+        {isPresident && (
+          <Card className="p-4">
+            <div className="flex flex-col gap-2">
+              <Label className="text-sm font-semibold">
+                Ajouter une équipe (réservé au Président)
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                <Input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Nom de la nouvelle équipe"
+                  disabled={locked || adding}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") addProject();
+                  }}
+                  className="max-w-md flex-1"
+                />
+                <Button onClick={addProject} disabled={locked || adding || !newName.trim()}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  {adding ? "Ajout..." : "Ajouter"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                L'équipe sera ajoutée pour tous les jurés avec le prochain numéro
+                disponible.
+              </p>
+            </div>
+          </Card>
+        )}
+
         <Card className="overflow-hidden p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -253,17 +338,19 @@ function Vote() {
                     </th>
                   ))}
                   <th className="px-3 py-3 text-center">Total</th>
+                  {isPresident && <th className="px-2 py-3"></th>}
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className="border-t hover:bg-muted/30">
-                    <td className="px-3 py-2 font-mono text-muted-foreground">{i + 1}</td>
+                {rows.map((r) => (
+                  <tr key={r.project_number} className="border-t hover:bg-muted/30">
+                    <td className="px-3 py-2 font-mono text-muted-foreground">
+                      {r.project_number}
+                    </td>
                     <td className="px-3 py-2">
                       <Input
                         value={r.project_name}
-                        onChange={(e) => updateName(i, e.target.value)}
-                        placeholder={PROJECT_NAMES[i]}
+                        onChange={(e) => updateName(r.project_number, e.target.value)}
                         disabled={locked}
                         className="h-9 min-w-[180px]"
                       />
@@ -275,7 +362,7 @@ function Vote() {
                           min={0}
                           max={c.max}
                           value={r.scores[c.key]}
-                          onChange={(e) => update(i, c.key, e.target.value)}
+                          onChange={(e) => update(r.project_number, c.key, e.target.value)}
                           placeholder="0"
                           disabled={locked}
                           className="h-9 w-16 text-center"
@@ -287,8 +374,31 @@ function Vote() {
                         {totalOf(r)}
                       </span>
                     </td>
+                    {isPresident && (
+                      <td className="px-2 py-2 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          disabled={locked}
+                          onClick={() => removeProject(r.project_number, r.project_name)}
+                          title="Supprimer cette équipe"
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))}
+                {rows.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={CRITERIA.length + 3 + (isPresident ? 1 : 0)}
+                      className="px-3 py-10 text-center text-sm text-muted-foreground"
+                    >
+                      Aucune équipe enregistrée.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
