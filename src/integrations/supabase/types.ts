@@ -56,6 +56,24 @@ export type Database = {
         }
         Relationships: []
       }
+      session_settings: {
+        Row: {
+          id: number
+          locked: boolean
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          locked?: boolean
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          locked?: boolean
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

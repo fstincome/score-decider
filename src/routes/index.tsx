@@ -1,16 +1,33 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Trophy, Medal, Award, ClipboardList, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Trophy,
+  Medal,
+  Award,
+  ClipboardList,
+  ChevronDown,
+  ChevronUp,
+  Lock,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CRITERIA, JURY_NAMES, PROJECT_COUNT } from "@/lib/scoring";
+import {
+  CRITERIA,
+  JURY_NAMES,
+  PROJECT_COUNT,
+  PROJECT_NAMES,
+} from "@/lib/scoring";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Classement Live — Jury" },
-      { name: "description", content: "Classement combiné en temps réel des projets selon les notes du jury." },
+      { title: "Classement Live — Marketing Digital Competition" },
+      {
+        name: "description",
+        content:
+          "Classement combiné en temps réel des 8 projets — Marketing Digital Competition.",
+      },
     ],
   }),
   component: Index,
@@ -35,16 +52,35 @@ const PRIMARY_JURY = JURY_NAMES[0];
 function Index() {
   const [evals, setEvals] = useState<Eval[]>([]);
   const [showHistory, setShowHistory] = useState(false);
+  const [locked, setLocked] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from("evaluations").select("*");
       if (data) setEvals(data as Eval[]);
     };
+    const loadLock = async () => {
+      const { data } = await supabase
+        .from("session_settings")
+        .select("locked")
+        .eq("id", 1)
+        .maybeSingle();
+      if (data) setLocked(!!data.locked);
+    };
     load();
+    loadLock();
     const ch = supabase
       .channel("eval-live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "evaluations" }, load)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "evaluations" },
+        load,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "session_settings" },
+        loadLock,
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
@@ -54,9 +90,9 @@ function Index() {
   const aggregated = Array.from({ length: PROJECT_COUNT }, (_, i) => {
     const num = i + 1;
     const rows = evals.filter((e) => e.project_number === num);
-    // Use the name from Jury 1 as the authoritative name
     const primaryRow = rows.find((r) => r.jury_name === PRIMARY_JURY);
-    const name = primaryRow?.project_name?.trim() || "";
+    const name =
+      primaryRow?.project_name?.trim() || PROJECT_NAMES[i] || `Projet ${num}`;
     const totals = rows.map((r) =>
       CRITERIA.reduce((s, c) => s + Number(r[c.key as keyof Eval] || 0), 0),
     );
@@ -82,11 +118,16 @@ function Index() {
       <header className="border-b bg-gradient-to-br from-primary to-[color:var(--primary-glow)] text-primary-foreground">
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8 md:flex-row md:items-end md:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight md:text-4xl">
-              Classement Final
+            <div className="text-xs font-semibold uppercase tracking-widest opacity-80">
+              Marketing Digital Competition
+            </div>
+            <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">
+              {locked ? "🏆 Résultats Proclamés" : "Classement Live"}
             </h1>
             <p className="mt-1 text-sm opacity-90">
-              Résultats condensés du jury — mise à jour en temps réel
+              {locked
+                ? "Session clôturée par le Président — résultats officiels."
+                : "Mise à jour en temps réel selon les notes du jury."}
             </p>
           </div>
           <Link to="/vote">
@@ -98,11 +139,17 @@ function Index() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        {locked && (
+          <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
+            <Lock className="h-4 w-4" />
+            Session officiellement clôturée — les notes ne sont plus modifiables.
+          </div>
+        )}
         <Card className="p-0">
           <div className="border-b px-5 py-3">
             <h2 className="text-lg font-semibold">Classement</h2>
             <p className="text-xs text-muted-foreground">
-              Trié sur la moyenne des totaux des jurés
+              Trié sur la moyenne des totaux des jurés · {PROJECT_COUNT} projets
             </p>
           </div>
           <div className="divide-y">
@@ -126,11 +173,10 @@ function Index() {
               >
                 <div className="flex h-10 w-10 items-center justify-center">{podiumIcon(i)}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-semibold">
-                    {p.name || `Projet ${p.num}`}
-                  </div>
+                  <div className="truncate text-base font-semibold">{p.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    Projet n°{p.num} · {p.submitted}/{JURY_NAMES.length} juré{p.submitted > 1 ? "s" : ""}
+                    Projet n°{p.num} · {p.submitted}/{JURY_NAMES.length} juré
+                    {p.submitted > 1 ? "s" : ""}
                   </div>
                 </div>
                 <div className="text-right">
@@ -162,7 +208,7 @@ function Index() {
                   <tr>
                     <th className="px-3 py-2 text-left">Juré</th>
                     <th className="px-3 py-2 text-left">#</th>
-                    <th className="px-3 py-2 text-left">Projet (saisi)</th>
+                    <th className="px-3 py-2 text-left">Projet</th>
                     {CRITERIA.map((c) => (
                       <th key={c.key} className="px-2 py-2 text-center">
                         {c.label}
@@ -190,7 +236,9 @@ function Index() {
                             {e.project_number}
                           </td>
                           <td className="px-3 py-2">
-                            {e.project_name || <span className="text-muted-foreground">—</span>}
+                            {e.project_name ||
+                              PROJECT_NAMES[e.project_number - 1] ||
+                              "—"}
                           </td>
                           {CRITERIA.map((c) => (
                             <td key={c.key} className="px-2 py-2 text-center tabular-nums">
