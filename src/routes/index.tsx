@@ -1,117 +1,44 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  Trophy,
-  Medal,
-  Award,
-  ClipboardList,
-  ChevronDown,
-  ChevronUp,
-  Lock,
-} from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { Award, ClipboardList, Lock, Medal, Trophy } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CRITERIA, JURY_NAMES } from "@/lib/scoring";
+import { buildRanking } from "@/lib/scoring";
+import { useCompetition, useCompetitions } from "@/lib/useCompetition";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Classement Live — Marketing Digital Competition" },
+      { title: "Classement Live — Compétitions & jury" },
       {
         name: "description",
         content:
-          "Classement combiné en temps réel — Marketing Digital Competition.",
+          "Classement combiné en temps réel des équipes, calculé à partir des notes de tous les jurés.",
       },
+      { property: "og:title", content: "Classement Live — Compétitions & jury" },
+      {
+        property: "og:description",
+        content: "Suivez le classement des équipes en direct, compétition par compétition.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Index,
 });
 
-type Eval = {
-  id: string;
-  jury_name: string;
-  project_number: number;
-  project_name: string;
-  innovation: number;
-  impact: number;
-  faisabilite: number;
-  prototype: number;
-  pitch: number;
-  questions: number;
-  created_at: string;
-};
-type Project = { project_number: number; name: string };
-
-const PRIMARY_JURY = JURY_NAMES[0];
-
 function Index() {
-  const [evals, setEvals] = useState<Eval[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [locked, setLocked] = useState(false);
-
+  const { competitions } = useCompetitions();
+  const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => {
-    const loadEvals = async () => {
-      const { data } = await supabase.from("evaluations").select("*");
-      if (data) setEvals(data as Eval[]);
-    };
-    const loadProjects = async () => {
-      const { data } = await supabase
-        .from("projects")
-        .select("*")
-        .order("project_number");
-      if (data) setProjects(data as Project[]);
-    };
-    const loadLock = async () => {
-      const { data } = await supabase
-        .from("session_settings")
-        .select("locked")
-        .eq("id", 1)
-        .maybeSingle();
-      if (data) setLocked(!!data.locked);
-    };
-    loadEvals();
-    loadProjects();
-    loadLock();
-    const ch = supabase
-      .channel("dash-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "evaluations" },
-        loadEvals,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "projects" },
-        loadProjects,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "session_settings" },
-        loadLock,
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, []);
+    if (!selected && competitions.length) setSelected(competitions[0].id);
+  }, [competitions, selected]);
 
-  const aggregated = projects.map((p) => {
-    const rows = evals.filter((e) => e.project_number === p.project_number);
-    const primaryRow = rows.find((r) => r.jury_name === PRIMARY_JURY);
-    const name = primaryRow?.project_name?.trim() || p.name || `Projet ${p.project_number}`;
-    const totals = rows.map((r) =>
-      CRITERIA.reduce((s, c) => s + Number(r[c.key as keyof Eval] || 0), 0),
-    );
-    const submitted = totals.length;
-    const sum = totals.reduce((s, t) => s + t, 0);
-    const avg = submitted ? sum / submitted : 0;
-    return { num: p.project_number, name, submitted, avg };
-  });
+  const { competition, criteria, teams, juries, scores } = useCompetition(selected);
+  const locked = !!competition?.locked;
 
-  const ranking = [...aggregated]
-    .filter((p) => p.submitted > 0)
+  const ranking = buildRanking(teams, criteria, scores)
+    .filter((r) => r.submitted > 0)
     .sort((a, b) => b.avg - a.avg);
 
   const podiumIcon = (i: number) => {
@@ -127,139 +54,91 @@ function Index() {
         <div className="mx-auto flex max-w-5xl flex-col gap-4 px-6 py-8 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-widest opacity-80">
-              Marketing Digital Competition
+              {competition?.name ?? "Compétition"}
             </div>
             <h1 className="mt-1 text-3xl font-bold tracking-tight md:text-4xl">
               {locked ? "🏆 Résultats Proclamés" : "Classement Live"}
             </h1>
             <p className="mt-1 text-sm opacity-90">
               {locked
-                ? "Session clôturée par le Président — résultats officiels."
+                ? "Session clôturée — résultats officiels."
                 : "Mise à jour en temps réel selon les notes du jury."}
             </p>
           </div>
-          <Link to="/vote">
+          <Link to="/login">
             <Button variant="secondary" size="lg">
-              <ClipboardList className="mr-2 h-4 w-4" /> Espace juré
+              <ClipboardList className="mr-2 h-4 w-4" /> Espace jury / admin
             </Button>
           </Link>
         </div>
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        {competitions.length > 1 && (
+          <div className="flex flex-wrap gap-2">
+            {competitions.map((c) => (
+              <Button
+                key={c.id}
+                size="sm"
+                variant={selected === c.id ? "default" : "outline"}
+                onClick={() => setSelected(c.id)}
+              >
+                {c.name}
+              </Button>
+            ))}
+          </div>
+        )}
+
         {locked && (
           <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             <Lock className="h-4 w-4" />
-            Session officiellement clôturée — les notes ne sont plus modifiables.
+            Compétition clôturée — les notes ne sont plus modifiables.
           </div>
         )}
+
         <Card className="p-0">
           <div className="border-b px-5 py-3">
             <h2 className="text-lg font-semibold">Classement</h2>
             <p className="text-xs text-muted-foreground">
-              Trié sur la moyenne des totaux des jurés · {projects.length} équipe
-              {projects.length > 1 ? "s" : ""}
+              Moyenne des totaux des jurés · {teams.length} équipe
+              {teams.length > 1 ? "s" : ""} · {juries.length} juré
+              {juries.length > 1 ? "s" : ""}
             </p>
           </div>
           <div className="divide-y">
             {ranking.length === 0 && (
               <div className="px-5 py-10 text-center text-sm text-muted-foreground">
-                Aucune note encore. Demandez aux jurés d'ouvrir l'espace juré.
+                Aucune note encore enregistrée.
               </div>
             )}
-            {ranking.map((p, i) => (
+            {ranking.map((r, i) => (
               <div
-                key={p.num}
+                key={r.team.id}
                 className={`flex items-center gap-4 px-5 py-4 ${
                   i === 0
                     ? "bg-gradient-to-r from-[color:var(--gold)]/15 to-transparent"
                     : i === 1
-                    ? "bg-gradient-to-r from-[color:var(--silver)]/10 to-transparent"
-                    : i === 2
-                    ? "bg-gradient-to-r from-[color:var(--bronze)]/10 to-transparent"
-                    : ""
+                      ? "bg-gradient-to-r from-[color:var(--silver)]/10 to-transparent"
+                      : i === 2
+                        ? "bg-gradient-to-r from-[color:var(--bronze)]/10 to-transparent"
+                        : ""
                 }`}
               >
                 <div className="flex h-10 w-10 items-center justify-center">{podiumIcon(i)}</div>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-base font-semibold">{p.name}</div>
+                  <div className="truncate text-base font-semibold">{r.team.name}</div>
                   <div className="text-xs text-muted-foreground">
-                    Projet n°{p.num} · {p.submitted}/{JURY_NAMES.length} juré
-                    {p.submitted > 1 ? "s" : ""}
+                    Équipe n°{r.team.project_number} · {r.submitted}/{juries.length} juré
+                    {r.submitted > 1 ? "s" : ""}
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold tabular-nums">{p.avg.toFixed(1)}</div>
-                  <div className="text-[10px] uppercase text-muted-foreground">/ 100</div>
+                  <div className="text-2xl font-bold tabular-nums">{r.avg.toFixed(1)}</div>
+                  <div className="text-[10px] uppercase text-muted-foreground">/ {r.max}</div>
                 </div>
               </div>
             ))}
           </div>
-        </Card>
-
-        <Card className="p-0">
-          <button
-            onClick={() => setShowHistory((s) => !s)}
-            className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-muted/30"
-          >
-            <div>
-              <h2 className="text-sm font-semibold">Historique des évaluations</h2>
-              <p className="text-xs text-muted-foreground">
-                Détail conservé par juré ({evals.length} entrée{evals.length > 1 ? "s" : ""})
-              </p>
-            </div>
-            {showHistory ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </button>
-          {showHistory && (
-            <div className="overflow-x-auto border-t">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Juré</th>
-                    <th className="px-3 py-2 text-left">#</th>
-                    <th className="px-3 py-2 text-left">Projet</th>
-                    {CRITERIA.map((c) => (
-                      <th key={c.key} className="px-2 py-2 text-center">
-                        {c.label}
-                      </th>
-                    ))}
-                    <th className="px-3 py-2 text-center">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...evals]
-                    .sort(
-                      (a, b) =>
-                        a.jury_name.localeCompare(b.jury_name) ||
-                        a.project_number - b.project_number,
-                    )
-                    .map((e) => {
-                      const total = CRITERIA.reduce(
-                        (s, c) => s + Number(e[c.key as keyof Eval] || 0),
-                        0,
-                      );
-                      return (
-                        <tr key={e.id} className="border-t">
-                          <td className="px-3 py-2 font-medium">{e.jury_name}</td>
-                          <td className="px-3 py-2 font-mono text-muted-foreground">
-                            {e.project_number}
-                          </td>
-                          <td className="px-3 py-2">{e.project_name || "—"}</td>
-                          {CRITERIA.map((c) => (
-                            <td key={c.key} className="px-2 py-2 text-center tabular-nums">
-                              {Number(e[c.key as keyof Eval] || 0)}
-                            </td>
-                          ))}
-                          <td className="px-3 py-2 text-center font-semibold tabular-nums">
-                            {total}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                </tbody>
-              </table>
-            </div>
-          )}
         </Card>
       </main>
     </div>
