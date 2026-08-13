@@ -14,83 +14,234 @@ export type Database = {
   }
   public: {
     Tables: {
-      evaluations: {
+      access_codes: {
         Row: {
+          code: string
           created_at: string
-          faisabilite: number
           id: string
-          impact: number
-          innovation: number
-          jury_name: string
-          pitch: number
-          project_name: string
-          project_number: number
-          prototype: number
-          questions: number
-        }
-        Insert: {
-          created_at?: string
-          faisabilite?: number
-          id?: string
-          impact?: number
-          innovation?: number
-          jury_name: string
-          pitch?: number
-          project_name?: string
-          project_number: number
-          prototype?: number
-          questions?: number
-        }
-        Update: {
-          created_at?: string
-          faisabilite?: number
-          id?: string
-          impact?: number
-          innovation?: number
-          jury_name?: string
-          pitch?: number
-          project_name?: string
-          project_number?: number
-          prototype?: number
-          questions?: number
-        }
-        Relationships: []
-      }
-      projects: {
-        Row: {
-          created_at: string
-          name: string
-          project_number: number
-        }
-        Insert: {
-          created_at?: string
-          name?: string
-          project_number: number
-        }
-        Update: {
-          created_at?: string
-          name?: string
-          project_number?: number
-        }
-        Relationships: []
-      }
-      session_settings: {
-        Row: {
-          id: number
-          locked: boolean
+          jury_id: string | null
+          role: string
           updated_at: string
         }
         Insert: {
-          id?: number
-          locked?: boolean
+          code: string
+          created_at?: string
+          id?: string
+          jury_id?: string | null
+          role: string
           updated_at?: string
         }
         Update: {
-          id?: number
+          code?: string
+          created_at?: string
+          id?: string
+          jury_id?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_codes_jury_id_fkey"
+            columns: ["jury_id"]
+            isOneToOne: false
+            referencedRelation: "juries"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      competitions: {
+        Row: {
+          created_at: string
+          id: string
+          locked: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
           locked?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          locked?: boolean
+          name?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      criteria: {
+        Row: {
+          competition_id: string
+          created_at: string
+          id: string
+          label: string
+          max_points: number
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          competition_id: string
+          created_at?: string
+          id?: string
+          label?: string
+          max_points?: number
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          competition_id?: string
+          created_at?: string
+          id?: string
+          label?: string
+          max_points?: number
+          position?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "criteria_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      juries: {
+        Row: {
+          competition_id: string
+          created_at: string
+          id: string
+          is_president: boolean
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          competition_id: string
+          created_at?: string
+          id?: string
+          is_president?: boolean
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          competition_id?: string
+          created_at?: string
+          id?: string
+          is_president?: boolean
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "juries_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scores: {
+        Row: {
+          competition_id: string
+          created_at: string
+          criterion_id: string
+          id: string
+          jury_id: string
+          team_id: string
+          updated_at: string
+          value: number
+        }
+        Insert: {
+          competition_id: string
+          created_at?: string
+          criterion_id: string
+          id?: string
+          jury_id: string
+          team_id: string
+          updated_at?: string
+          value?: number
+        }
+        Update: {
+          competition_id?: string
+          created_at?: string
+          criterion_id?: string
+          id?: string
+          jury_id?: string
+          team_id?: string
+          updated_at?: string
+          value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scores_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_criterion_id_fkey"
+            columns: ["criterion_id"]
+            isOneToOne: false
+            referencedRelation: "criteria"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_jury_id_fkey"
+            columns: ["jury_id"]
+            isOneToOne: false
+            referencedRelation: "juries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scores_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          competition_id: string
+          created_at: string
+          id: string
+          name: string
+          project_number: number
+          updated_at: string
+        }
+        Insert: {
+          competition_id: string
+          created_at?: string
+          id?: string
+          name?: string
+          project_number: number
+          updated_at?: string
+        }
+        Update: {
+          competition_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          project_number?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_competition_id_fkey"
+            columns: ["competition_id"]
+            isOneToOne: false
+            referencedRelation: "competitions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {

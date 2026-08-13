@@ -1,240 +1,163 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import {
   ArrowLeft,
-  Check,
-  Send,
   Lock,
-  Unlock,
+  LogOut,
   Megaphone,
   Plus,
+  Send,
   Trash2,
+  Unlock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CRITERIA, JURY_NAMES, PRESIDENT_JURY } from "@/lib/scoring";
 import { Toaster } from "@/components/ui/sonner";
+import { totalMax } from "@/lib/scoring";
+import { useCompetition } from "@/lib/useCompetition";
+import { clearSession, readSession, type AppSession } from "@/lib/session";
 
 export const Route = createFileRoute("/vote")({
   head: () => ({
     meta: [
-      { title: "Espace Juré — Saisie des notes" },
-      { name: "description", content: "Saisissez et envoyez vos notes pour chaque projet." },
+      { title: "Espace juré — Saisie des notes" },
+      {
+        name: "description",
+        content:
+          "Saisissez vos notes par critère pour chaque équipe de votre compétition.",
+      },
+      { property: "og:title", content: "Espace juré — Saisie des notes" },
+      {
+        property: "og:description",
+        content: "Notation par critère, en temps réel, pour chaque équipe.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: Vote,
 });
 
-type Project = { project_number: number; name: string };
-type Row = {
-  project_number: number;
-  project_name: string;
-  scores: Record<string, string>;
-};
-
-const emptyScores = () =>
-  Object.fromEntries(CRITERIA.map((c) => [c.key, ""])) as Record<string, string>;
+const key = (teamId: string, critId: string) => `${teamId}:${critId}`;
 
 function Vote() {
-  const [jury, setJury] = useState<string>("");
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [rows, setRows] = useState<Row[]>([]);
+  const navigate = useNavigate();
+  const [session, setSession] = useState<AppSession | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const s = readSession();
+    setSession(s);
+    setReady(true);
+    if (!s) navigate({ to: "/login" });
+    else if (s.role === "admin") navigate({ to: "/admin" });
+  }, [navigate]);
+
+  const competitionId = session?.role === "jury" ? session.competitionId : null;
+  const { competition, criteria, teams, scores } = useCompetition(competitionId);
+
+  const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [locked, setLocked] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [adding, setAdding] = useState(false);
+  const [newTeam, setNewTeam] = useState("");
 
-  const isPresident = jury === PRESIDENT_JURY;
+  const juryId = session?.role === "jury" ? session.juryId : "";
+  const isPresident = session?.role === "jury" && session.isPresident;
+  const locked = !!competition?.locked;
 
-  // Load lock + projects + subscribe
   useEffect(() => {
-    const loadLock = async () => {
-      const { data } = await supabase
-        .from("session_settings")
-        .select("locked")
-        .eq("id", 1)
-        .maybeSingle();
-      if (data) setLocked(!!data.locked);
-    };
-    const loadProjects = async () => {
-      const { data } = await supabase
-        .from("projects")
-        .select("*")
-        .order("project_number");
-      if (data) setProjects(data as Project[]);
-    };
-    loadLock();
-    loadProjects();
-    const ch = supabase
-      .channel("vote-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "session_settings" },
-        loadLock,
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "projects" },
-        loadProjects,
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(ch);
-    };
-  }, []);
-
-  // Rebuild rows when projects or jury change
-  useEffect(() => {
-    if (!jury || projects.length === 0) {
-      setRows([]);
-      return;
+    if (!juryId) return;
+    const next: Record<string, string> = {};
+    for (const t of teams) {
+      for (const c of criteria) {
+        const s = scores.find(
+          (x) => x.jury_id === juryId && x.team_id === t.id && x.criterion_id === c.id,
+        );
+        next[key(t.id, c.id)] = s ? String(s.value) : "";
+      }
     }
-    (async () => {
-      const { data: evalRows } = await supabase
-        .from("evaluations")
-        .select("*")
-        .eq("jury_name", jury);
-      const byNum = new Map<number, any>();
-      (evalRows ?? []).forEach((d: any) => byNum.set(d.project_number, d));
-      const next: Row[] = projects.map((p) => {
-        const ev = byNum.get(p.project_number);
-        return {
-          project_number: p.project_number,
-          project_name: ev?.project_name?.trim() || p.name || `Projet ${p.project_number}`,
-          scores: ev
-            ? Object.fromEntries(
-                CRITERIA.map((c) => [c.key, String(ev[c.key] ?? "")]),
-              )
-            : emptyScores(),
-        };
-      });
-      setRows(next);
-    })();
-  }, [jury, projects]);
+    setValues((prev) => ({ ...next, ...prev }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teams, criteria, scores.length, juryId]);
 
-  const update = (num: number, key: string, value: string) =>
-    setRows((rs) =>
-      rs.map((r) =>
-        r.project_number === num ? { ...r, scores: { ...r.scores, [key]: value } } : r,
-      ),
-    );
-  const updateName = (num: number, value: string) =>
-    setRows((rs) =>
-      rs.map((r) => (r.project_number === num ? { ...r, project_name: value } : r)),
-    );
-
-  const totalOf = (r: Row) =>
-    CRITERIA.reduce((s, c) => {
-      const v = parseFloat(r.scores[c.key] || "0");
-      return s + (isNaN(v) ? 0 : Math.min(v, c.max));
+  const totalOf = (teamId: string) =>
+    criteria.reduce((s, c) => {
+      const v = parseFloat(values[key(teamId, c.id)] || "0");
+      return s + (isNaN(v) ? 0 : Math.min(Math.max(v, 0), Number(c.max_points)));
     }, 0);
 
   const submit = async () => {
-    if (!jury) return;
-    if (locked) {
-      toast.error("Les modifications sont clôturées par le Président.");
-      return;
-    }
+    if (!competitionId || !juryId) return;
+    if (locked) return toast.error("Compétition clôturée par le Président.");
     setSaving(true);
-    const payload = rows.map((r) => ({
-      jury_name: jury,
-      project_number: r.project_number,
-      project_name: r.project_name?.trim() || `Projet ${r.project_number}`,
-      ...Object.fromEntries(
-        CRITERIA.map((c) => {
-          const v = parseFloat(r.scores[c.key] || "0");
-          return [c.key, isNaN(v) ? 0 : Math.min(Math.max(v, 0), c.max)];
-        }),
-      ),
-    }));
+    const payload = teams.flatMap((t) =>
+      criteria.map((c) => {
+        const raw = parseFloat(values[key(t.id, c.id)] || "0");
+        const v = isNaN(raw) ? 0 : Math.min(Math.max(raw, 0), Number(c.max_points));
+        return {
+          competition_id: competitionId,
+          jury_id: juryId,
+          team_id: t.id,
+          criterion_id: c.id,
+          value: v,
+        };
+      }),
+    );
     const { error } = await supabase
-      .from("evaluations")
-      .upsert(payload, { onConflict: "jury_name,project_number" });
+      .from("scores")
+      .upsert(payload, { onConflict: "jury_id,team_id,criterion_id" });
     setSaving(false);
     if (error) toast.error("Erreur d'envoi : " + error.message);
-    else toast.success(`Notes envoyées ✓ (${payload.length} projets)`);
+    else toast.success(`Notes envoyées ✓ (${teams.length} équipes)`);
   };
 
   const toggleLock = async () => {
+    if (!competitionId) return;
     const next = !locked;
     const { error } = await supabase
-      .from("session_settings")
-      .update({ locked: next, updated_at: new Date().toISOString() })
-      .eq("id", 1);
+      .from("competitions")
+      .update({ locked: next })
+      .eq("id", competitionId);
     if (error) return toast.error("Erreur : " + error.message);
-    setLocked(next);
-    toast.success(next ? "Session clôturée — résultats proclamés 🏆" : "Modifications rouvertes");
+    toast.success(next ? "Compétition clôturée 🏆" : "Modifications rouvertes");
   };
 
-  const addProject = async () => {
-    const name = newName.trim();
-    if (!name) return toast.error("Indiquez un nom d'équipe.");
-    if (locked) return toast.error("Session clôturée.");
-    setAdding(true);
-    const nextNum =
-      projects.reduce((m, p) => Math.max(m, p.project_number), 0) + 1;
+  const addTeam = async () => {
+    const name = newTeam.trim();
+    if (!competitionId || !name) return toast.error("Indiquez un nom d'équipe.");
+    if (locked) return toast.error("Compétition clôturée.");
+    const nextNum = teams.reduce((m, t) => Math.max(m, t.project_number), 0) + 1;
     const { error } = await supabase
-      .from("projects")
-      .insert({ project_number: nextNum, name });
-    setAdding(false);
+      .from("teams")
+      .insert({ competition_id: competitionId, project_number: nextNum, name });
     if (error) return toast.error("Erreur : " + error.message);
-    setNewName("");
+    setNewTeam("");
     toast.success(`Équipe ajoutée : ${name} (n°${nextNum})`);
   };
 
-  const removeProject = async (num: number, name: string) => {
-    if (!confirm(`Supprimer l'équipe « ${name} » (n°${num}) et toutes ses notes ?`)) return;
-    const { error: e1 } = await supabase
-      .from("evaluations")
-      .delete()
-      .eq("project_number", num);
-    if (e1) return toast.error("Erreur notes : " + e1.message);
-    const { error: e2 } = await supabase
-      .from("projects")
-      .delete()
-      .eq("project_number", num);
-    if (e2) return toast.error("Erreur : " + e2.message);
-    toast.success("Équipe supprimée");
+  const removeTeam = async (id: string, name: string) => {
+    if (!confirm(`Supprimer l'équipe « ${name} » et toutes ses notes ?`)) return;
+    const { error } = await supabase.from("teams").delete().eq("id", id);
+    if (error) toast.error("Erreur : " + error.message);
+    else toast.success("Équipe supprimée");
   };
 
-  if (!jury) {
+  const logout = () => {
+    clearSession();
+    navigate({ to: "/login" });
+  };
+
+  if (!ready || !session || session.role !== "jury") {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4">
-        <Toaster richColors />
-        <Card className="w-full max-w-md p-6">
-          <Link to="/" className="text-xs text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="mr-1 inline h-3 w-3" /> Retour
-          </Link>
-          <h1 className="mt-2 text-2xl font-bold">Espace Juré</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Marketing Digital Competition — sélectionnez qui vous êtes.
-          </p>
-          {locked && (
-            <div className="mt-4 flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              <Lock className="h-3.5 w-3.5" /> Session clôturée par le Président.
-            </div>
-          )}
-          <div className="mt-6 grid gap-2">
-            {JURY_NAMES.map((j) => (
-              <Button
-                key={j}
-                size="lg"
-                variant="outline"
-                className="justify-start"
-                onClick={() => setJury(j)}
-              >
-                <Check className="mr-2 h-4 w-4" /> Je suis {j}
-              </Button>
-            ))}
-          </div>
-        </Card>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Chargement…</p>
       </div>
     );
   }
+
+  const max = totalMax(criteria);
 
   return (
     <div className="min-h-screen bg-background">
@@ -246,11 +169,11 @@ function Vote() {
               <ArrowLeft className="mr-1 inline h-3 w-3" /> Classement
             </Link>
             <h1 className="mt-1 text-2xl font-bold md:text-3xl">
-              Mes notes — {jury}
+              Mes notes — {session.juryName}
             </h1>
             <p className="text-xs opacity-90">
-              Marketing Digital Competition · {projects.length} projet
-              {projects.length > 1 ? "s" : ""} · noté sur 100
+              {competition?.name ?? "…"} · {teams.length} équipe
+              {teams.length > 1 ? "s" : ""} · noté sur {max}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -260,11 +183,7 @@ function Vote() {
               </span>
             )}
             {isPresident && (
-              <Button
-                size="lg"
-                variant={locked ? "outline" : "destructive"}
-                onClick={toggleLock}
-              >
+              <Button size="lg" variant={locked ? "outline" : "destructive"} onClick={toggleLock}>
                 {locked ? (
                   <>
                     <Unlock className="mr-2 h-4 w-4" /> Rouvrir
@@ -280,143 +199,99 @@ function Vote() {
               <Send className="mr-2 h-4 w-4" />
               {saving ? "Envoi..." : "Envoyer"}
             </Button>
+            <Button size="icon" variant="ghost" onClick={logout} aria-label="Se déconnecter">
+              <LogOut className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8 space-y-6">
+      <main className="mx-auto max-w-7xl space-y-6 px-6 py-8">
         {locked && (
           <div className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
-            <Lock className="h-4 w-4" />
-            Les modifications sont clôturées par le Président.
+            <Lock className="h-4 w-4" /> Compétition clôturée — saisie désactivée.
           </div>
         )}
 
         {isPresident && (
-          <Card className="p-4">
-            <div className="flex flex-col gap-2">
-              <Label className="text-sm font-semibold">
-                Ajouter une équipe (réservé au Président)
-              </Label>
-              <div className="flex flex-wrap gap-2">
-                <Input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Nom de la nouvelle équipe"
-                  disabled={locked || adding}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") addProject();
-                  }}
-                  className="max-w-md flex-1"
-                />
-                <Button onClick={addProject} disabled={locked || adding || !newName.trim()}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  {adding ? "Ajout..." : "Ajouter"}
-                </Button>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                L'équipe sera ajoutée pour tous les jurés avec le prochain numéro
-                disponible.
-              </p>
-            </div>
+          <Card className="flex flex-col gap-2 p-4 md:flex-row md:items-center">
+            <Input
+              placeholder="Nom d'une nouvelle équipe"
+              value={newTeam}
+              onChange={(e) => setNewTeam(e.target.value)}
+              disabled={locked}
+            />
+            <Button onClick={addTeam} disabled={locked}>
+              <Plus className="mr-2 h-4 w-4" /> Ajouter une équipe
+            </Button>
           </Card>
         )}
 
-        <Card className="overflow-hidden p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-3 text-left">#</th>
-                  <th className="px-3 py-3 text-left">Nom du projet</th>
-                  {CRITERIA.map((c) => (
-                    <th key={c.key} className="px-2 py-3 text-center">
-                      {c.label}
-                      <div className="text-[10px] font-normal normal-case opacity-70">
-                        /{c.max}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-3 py-3 text-center">Total</th>
-                  {isPresident && <th className="px-2 py-3"></th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.project_number} className="border-t hover:bg-muted/30">
-                    <td className="px-3 py-2 font-mono text-muted-foreground">
-                      {r.project_number}
-                    </td>
-                    <td className="px-3 py-2">
+        <Card className="overflow-x-auto p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">#</th>
+                <th className="px-3 py-2 text-left">Équipe</th>
+                {criteria.map((c) => (
+                  <th key={c.id} className="px-2 py-2 text-center">
+                    {c.label}
+                    <div className="font-normal normal-case">/{Number(c.max_points)}</div>
+                  </th>
+                ))}
+                <th className="px-3 py-2 text-center">Total</th>
+                {isPresident && <th className="px-2 py-2" />}
+              </tr>
+            </thead>
+            <tbody>
+              {teams.map((t) => (
+                <tr key={t.id} className="border-t">
+                  <td className="px-3 py-2 font-mono text-muted-foreground">
+                    {t.project_number}
+                  </td>
+                  <td className="px-3 py-2 font-medium">{t.name}</td>
+                  {criteria.map((c) => (
+                    <td key={c.id} className="px-2 py-2">
                       <Input
-                        value={r.project_name}
-                        onChange={(e) => updateName(r.project_number, e.target.value)}
+                        type="number"
+                        min={0}
+                        max={Number(c.max_points)}
+                        step="0.5"
                         disabled={locked}
-                        className="h-9 min-w-[180px]"
+                        value={values[key(t.id, c.id)] ?? ""}
+                        onChange={(e) =>
+                          setValues((v) => ({ ...v, [key(t.id, c.id)]: e.target.value }))
+                        }
+                        className="mx-auto w-20 text-center"
                       />
                     </td>
-                    {CRITERIA.map((c) => (
-                      <td key={c.key} className="px-1.5 py-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={c.max}
-                          value={r.scores[c.key]}
-                          onChange={(e) => update(r.project_number, c.key, e.target.value)}
-                          placeholder="0"
-                          disabled={locked}
-                          className="h-9 w-16 text-center"
-                        />
-                      </td>
-                    ))}
-                    <td className="px-3 py-2 text-center">
-                      <span className="inline-flex min-w-[48px] items-center justify-center rounded-md bg-primary/10 px-2 py-1 font-semibold text-primary">
-                        {totalOf(r)}
-                      </span>
+                  ))}
+                  <td className="px-3 py-2 text-center font-semibold tabular-nums">
+                    {totalOf(t.id).toFixed(1)}
+                  </td>
+                  {isPresident && (
+                    <td className="px-2 py-2">
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => removeTeam(t.id, t.name)}
+                        aria-label="Supprimer l'équipe"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </td>
-                    {isPresident && (
-                      <td className="px-2 py-2 text-center">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          disabled={locked}
-                          onClick={() => removeProject(r.project_number, r.project_name)}
-                          title="Supprimer cette équipe"
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-                {rows.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={CRITERIA.length + 3 + (isPresident ? 1 : 0)}
-                      className="px-3 py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Aucune équipe enregistrée.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-4 border-t px-5 py-4">
-            <div>
-              <Label className="text-xs text-muted-foreground">Connecté en tant que</Label>
-              <div className="font-medium">{jury}</div>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setJury("")}>
-                Changer de juré
-              </Button>
-              <Button onClick={submit} disabled={saving || locked}>
-                <Send className="mr-2 h-4 w-4" />
-                {saving ? "Envoi..." : "Envoyer"}
-              </Button>
-            </div>
-          </div>
+                  )}
+                </tr>
+              ))}
+              {teams.length === 0 && (
+                <tr>
+                  <td colSpan={criteria.length + 3} className="px-3 py-10 text-center text-muted-foreground">
+                    Aucune équipe pour l'instant.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </Card>
       </main>
     </div>
