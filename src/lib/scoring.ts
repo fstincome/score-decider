@@ -1,25 +1,76 @@
-export const CRITERIA = [
-  { key: "innovation", label: "Innovation", max: 25 },
-  { key: "impact", label: "Impact", max: 20 },
-  { key: "faisabilite", label: "Faisabilité technique", max: 20 },
-  { key: "prototype", label: "Qualité du prototype", max: 15 },
-  { key: "pitch", label: "Présentation du pitch", max: 10 },
-  { key: "questions", label: "Réponses aux questions", max: 10 },
-] as const;
+export type Competition = {
+  id: string;
+  name: string;
+  locked: boolean;
+  created_at: string;
+};
 
-export type CriterionKey = (typeof CRITERIA)[number]["key"];
+export type Criterion = {
+  id: string;
+  competition_id: string;
+  label: string;
+  max_points: number;
+  position: number;
+};
 
-export const PROJECT_NAMES = [
-  "Turiho",
-  "Gitega Street Marketing",
-  "Echo Creative Studio",
-  "Burundi e-Market",
-  "Kwiga Design",
-  "Ingoma Creative Hub",
-  "Marketing Solutions Agency",
-  "Gitega Influencers Network",
-] as const;
+export type Team = {
+  id: string;
+  competition_id: string;
+  project_number: number;
+  name: string;
+};
 
-export const PROJECT_COUNT = PROJECT_NAMES.length;
-export const JURY_NAMES = ["Juré 1", "Juré 2 (Président)", "Juré 3"] as const;
-export const PRESIDENT_JURY = JURY_NAMES[1];
+export type Jury = {
+  id: string;
+  competition_id: string;
+  name: string;
+  is_president: boolean;
+};
+
+export type Score = {
+  id: string;
+  competition_id: string;
+  jury_id: string;
+  team_id: string;
+  criterion_id: string;
+  value: number;
+};
+
+export const DEFAULT_CRITERIA = [
+  { label: "Innovation", max_points: 25 },
+  { label: "Impact", max_points: 20 },
+  { label: "Faisabilité technique", max_points: 20 },
+  { label: "Qualité du prototype", max_points: 15 },
+  { label: "Présentation du pitch", max_points: 10 },
+  { label: "Réponses aux questions", max_points: 10 },
+];
+
+export const totalMax = (criteria: Criterion[]) =>
+  criteria.reduce((s, c) => s + Number(c.max_points || 0), 0);
+
+/** Classement agrégé : moyenne des totaux des jurés ayant noté. */
+export function buildRanking(
+  teams: Team[],
+  criteria: Criterion[],
+  scores: Score[],
+) {
+  const byTeam = new Map<string, Map<string, number>>();
+  for (const s of scores) {
+    if (!byTeam.has(s.team_id)) byTeam.set(s.team_id, new Map());
+    const m = byTeam.get(s.team_id)!;
+    m.set(s.jury_id, (m.get(s.jury_id) ?? 0) + Number(s.value || 0));
+  }
+  const rows = teams.map((t) => {
+    const m = byTeam.get(t.id) ?? new Map<string, number>();
+    const totals = [...m.values()];
+    const submitted = totals.length;
+    const avg = submitted ? totals.reduce((a, b) => a + b, 0) / submitted : 0;
+    return {
+      team: t,
+      submitted,
+      avg,
+      max: totalMax(criteria),
+    };
+  });
+  return rows;
+}
