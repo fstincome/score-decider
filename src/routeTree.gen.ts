@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as VoteRouteImport } from './routes/vote'
+import { Route as PresidentRouteImport } from './routes/president'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
@@ -17,6 +18,11 @@ import { Route as IndexRouteImport } from './routes/index'
 const VoteRoute = VoteRouteImport.update({
   id: '/vote',
   path: '/vote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PresidentRoute = PresidentRouteImport.update({
+  id: '/president',
+  path: '/president',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -39,12 +45,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
 }
 export interface FileRoutesById {
@@ -52,20 +60,22 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
+  '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/vote'
+  fullPaths: '/' | '/admin' | '/login' | '/president' | '/vote'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/vote'
-  id: '__root__' | '/' | '/admin' | '/login' | '/vote'
+  to: '/' | '/admin' | '/login' | '/president' | '/vote'
+  id: '__root__' | '/' | '/admin' | '/login' | '/president' | '/vote'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
+  PresidentRoute: typeof PresidentRoute
   VoteRoute: typeof VoteRoute
 }
 
@@ -76,6 +86,13 @@ declare module '@tanstack/react-router' {
       path: '/vote'
       fullPath: '/vote'
       preLoaderRoute: typeof VoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/president': {
+      id: '/president'
+      path: '/president'
+      fullPath: '/president'
+      preLoaderRoute: typeof PresidentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -106,6 +123,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
+  PresidentRoute: PresidentRoute,
   VoteRoute: VoteRoute,
 }
 export const routeTree = rootRouteImport
