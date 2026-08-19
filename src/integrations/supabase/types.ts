@@ -55,6 +55,7 @@ export type Database = {
           id: string
           locked: boolean
           name: string
+          owner_jury_id: string | null
           updated_at: string
         }
         Insert: {
@@ -62,6 +63,7 @@ export type Database = {
           id?: string
           locked?: boolean
           name?: string
+          owner_jury_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -69,9 +71,18 @@ export type Database = {
           id?: string
           locked?: boolean
           name?: string
+          owner_jury_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "competitions_owner_jury_id_fkey"
+            columns: ["owner_jury_id"]
+            isOneToOne: false
+            referencedRelation: "juries"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       criteria: {
         Row: {
@@ -113,7 +124,7 @@ export type Database = {
       }
       juries: {
         Row: {
-          competition_id: string
+          competition_id: string | null
           created_at: string
           id: string
           is_president: boolean
@@ -121,7 +132,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
-          competition_id: string
+          competition_id?: string | null
           created_at?: string
           id?: string
           is_president?: boolean
@@ -129,7 +140,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
-          competition_id?: string
+          competition_id?: string | null
           created_at?: string
           id?: string
           is_president?: boolean
