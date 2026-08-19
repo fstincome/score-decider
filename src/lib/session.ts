@@ -6,7 +6,7 @@ export type AppSession =
       juryId: string;
       juryName: string;
       isPresident: boolean;
-      competitionId: string;
+      competitionId: string | null;
     };
 
 const KEY = "mdc_session";
@@ -23,6 +23,12 @@ export function readSession(): AppSession | null {
 
 export function writeSession(s: AppSession) {
   localStorage.setItem(KEY, JSON.stringify(s));
+}
+
+export function updateSession(patch: Partial<Extract<AppSession, { role: "jury" }>>) {
+  const s = readSession();
+  if (!s || s.role !== "jury") return;
+  writeSession({ ...s, ...patch });
 }
 
 export function clearSession() {
