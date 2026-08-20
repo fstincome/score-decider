@@ -1,15 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import {
-  ArrowLeft,
-  Lock,
-  LogOut,
-  Megaphone,
-  Plus,
-  Send,
-  Trash2,
-  Unlock,
-} from "lucide-react";
+import { ArrowLeft, Lock, LogOut, Megaphone, Send, Settings, Unlock } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -61,7 +52,6 @@ function Vote() {
 
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
-  const [newTeam, setNewTeam] = useState("");
 
   const juryId = session?.role === "jury" ? session.juryId : "";
   const isPresident = session?.role === "jury" && session.isPresident;
@@ -124,25 +114,6 @@ function Vote() {
     toast.success(next ? "Compétition clôturée 🏆" : "Modifications rouvertes");
   };
 
-  const addTeam = async () => {
-    const name = newTeam.trim();
-    if (!competitionId || !name) return toast.error("Indiquez un nom d'équipe.");
-    if (locked) return toast.error("Compétition clôturée.");
-    const nextNum = teams.reduce((m, t) => Math.max(m, t.project_number), 0) + 1;
-    const { error } = await supabase
-      .from("teams")
-      .insert({ competition_id: competitionId, project_number: nextNum, name });
-    if (error) return toast.error("Erreur : " + error.message);
-    setNewTeam("");
-    toast.success(`Équipe ajoutée : ${name} (n°${nextNum})`);
-  };
-
-  const removeTeam = async (id: string, name: string) => {
-    if (!confirm(`Supprimer l'équipe « ${name} » et toutes ses notes ?`)) return;
-    const { error } = await supabase.from("teams").delete().eq("id", id);
-    if (error) toast.error("Erreur : " + error.message);
-    else toast.success("Équipe supprimée");
-  };
 
   const logout = () => {
     clearSession();
@@ -153,6 +124,30 @@ function Vote() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Chargement…</p>
+      </div>
+    );
+  }
+
+  if (!competitionId) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+        <Toaster richColors />
+        <h1 className="text-xl font-semibold">Aucune compétition assignée</h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          {isPresident
+            ? "Créez ou sélectionnez une compétition dans votre espace président."
+            : "Votre président doit vous rattacher à une compétition avant que vous puissiez noter."}
+        </p>
+        <div className="flex gap-2">
+          {isPresident && (
+            <Button asChild>
+              <Link to="/president">Espace président</Link>
+            </Button>
+          )}
+          <Button variant="outline" onClick={logout}>
+            <LogOut className="mr-2 h-4 w-4" /> Se déconnecter
+          </Button>
+        </div>
       </div>
     );
   }
@@ -213,19 +208,6 @@ function Vote() {
           </div>
         )}
 
-        {isPresident && (
-          <Card className="flex flex-col gap-2 p-4 md:flex-row md:items-center">
-            <Input
-              placeholder="Nom d'une nouvelle équipe"
-              value={newTeam}
-              onChange={(e) => setNewTeam(e.target.value)}
-              disabled={locked}
-            />
-            <Button onClick={addTeam} disabled={locked}>
-              <Plus className="mr-2 h-4 w-4" /> Ajouter une équipe
-            </Button>
-          </Card>
-        )}
 
         <Card className="overflow-x-auto p-0">
           <table className="w-full text-sm">
@@ -240,7 +222,6 @@ function Vote() {
                   </th>
                 ))}
                 <th className="px-3 py-2 text-center">Total</th>
-                {isPresident && <th className="px-2 py-2" />}
               </tr>
             </thead>
             <tbody>
@@ -269,23 +250,11 @@ function Vote() {
                   <td className="px-3 py-2 text-center font-semibold tabular-nums">
                     {totalOf(t.id).toFixed(1)}
                   </td>
-                  {isPresident && (
-                    <td className="px-2 py-2">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => removeTeam(t.id, t.name)}
-                        aria-label="Supprimer l'équipe"
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </td>
-                  )}
                 </tr>
               ))}
               {teams.length === 0 && (
                 <tr>
-                  <td colSpan={criteria.length + 3} className="px-3 py-10 text-center text-muted-foreground">
+                  <td colSpan={criteria.length + 2} className="px-3 py-10 text-center text-muted-foreground">
                     Aucune équipe pour l'instant.
                   </td>
                 </tr>
