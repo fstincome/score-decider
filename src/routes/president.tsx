@@ -76,6 +76,25 @@ function PresidentPage() {
   const [newCrit, setNewCrit] = useState({ label: "", max: "10" });
   const [newJury, setNewJury] = useState({ name: "", code: "" });
   const [codes, setCodes] = useState<Record<string, string>>({});
+  const [myComps, setMyComps] = useState<
+    { id: string; name: string; locked: boolean }[]
+  >([]);
+
+  const loadMyComps = useCallback(async () => {
+    if (!myId) return;
+    const { data } = await supabase
+      .from("competitions")
+      .select("id, name, locked, created_at")
+      .eq("owner_jury_id", myId)
+      .order("created_at", { ascending: false });
+    setMyComps(
+      (data ?? []).map((c) => ({ id: c.id, name: c.name, locked: c.locked })),
+    );
+  }, [myId]);
+
+  useEffect(() => {
+    loadMyComps();
+  }, [loadMyComps, competition?.name, competition?.locked]);
 
   const refreshCodes = useCallback(async () => {
     if (!myCode || !competitionId) return;
@@ -90,6 +109,13 @@ function PresidentPage() {
   useEffect(() => {
     refreshCodes();
   }, [refreshCodes, juries.length]);
+
+  const switchCompetition = async (id: string) => {
+    if (!myId || id === competitionId) return;
+    await supabase.from("juries").update({ competition_id: id }).eq("id", myId);
+    updateSession({ competitionId: id });
+    setSession(readSession());
+  };
 
   const createCompetition = async () => {
     const name = newComp.trim();
@@ -112,8 +138,36 @@ function PresidentPage() {
     updateSession({ competitionId: data.id });
     setSession(readSession());
     setNewComp("");
+    await loadMyComps();
     toast.success("Compétition créée avec les critères par défaut.");
   };
+
+  const deleteCompetition = async (id: string, name: string) => {
+    if (!confirm(`Supprimer la compétition « ${name} » et toutes ses données ?`))
+      return;
+    await supabase.from("scores").delete().eq("competition_id", id);
+    await supabase.from("criteria").delete().eq("competition_id", id);
+    await supabase.from("teams").delete().eq("competition_id", id);
+    await supabase
+      .from("juries")
+      .delete()
+      .eq("competition_id", id)
+      .eq("is_president", false);
+    if (myId)
+      await supabase
+        .from("juries")
+        .update({ competition_id: null })
+        .eq("id", myId)
+        .eq("competition_id", id);
+    await supabase.from("competitions").delete().eq("id", id);
+    if (id === competitionId) {
+      updateSession({ competitionId: null });
+      setSession(readSession());
+    }
+    await loadMyComps();
+    toast.success("Compétition supprimée");
+  };
+
 
   const renameCompetition = async (name: string) => {
     if (!competition) return;
