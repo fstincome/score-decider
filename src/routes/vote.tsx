@@ -178,6 +178,13 @@ function Vote() {
               </span>
             )}
             {isPresident && (
+              <Button size="lg" variant="outline" asChild>
+                <Link to="/president">
+                  <Settings className="mr-2 h-4 w-4" /> Espace président
+                </Link>
+              </Button>
+            )}
+            {isPresident && (
               <Button size="lg" variant={locked ? "outline" : "destructive"} onClick={toggleLock}>
                 {locked ? (
                   <>
