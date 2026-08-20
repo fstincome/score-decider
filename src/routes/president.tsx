@@ -249,10 +249,6 @@ function PresidentPage() {
     }
   };
 
-  const startNewCompetition = () => {
-    updateSession({ competitionId: null });
-    setSession(readSession());
-  };
 
   if (!ready || !session || session.role !== "jury" || !session.isPresident) {
     return (
