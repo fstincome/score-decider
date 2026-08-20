@@ -58,7 +58,7 @@ function LoginPage() {
           isPresident: res.isPresident,
           competitionId: res.competitionId,
         });
-        navigate({ to: "/vote" });
+        navigate({ to: res.isPresident ? "/president" : "/vote" });
       }
     } catch {
       toast.error("Connexion impossible. Réessayez.");
