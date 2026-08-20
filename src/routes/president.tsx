@@ -76,6 +76,25 @@ function PresidentPage() {
   const [newCrit, setNewCrit] = useState({ label: "", max: "10" });
   const [newJury, setNewJury] = useState({ name: "", code: "" });
   const [codes, setCodes] = useState<Record<string, string>>({});
+  const [myComps, setMyComps] = useState<
+    { id: string; name: string; locked: boolean }[]
+  >([]);
+
+  const loadMyComps = useCallback(async () => {
+    if (!myId) return;
+    const { data } = await supabase
+      .from("competitions")
+      .select("id, name, locked, created_at")
+      .eq("owner_jury_id", myId)
+      .order("created_at", { ascending: false });
+    setMyComps(
+      (data ?? []).map((c) => ({ id: c.id, name: c.name, locked: c.locked })),
+    );
+  }, [myId]);
+
+  useEffect(() => {
+    loadMyComps();
+  }, [loadMyComps, competition?.name, competition?.locked]);
 
   const refreshCodes = useCallback(async () => {
     if (!myCode || !competitionId) return;
@@ -90,6 +109,13 @@ function PresidentPage() {
   useEffect(() => {
     refreshCodes();
   }, [refreshCodes, juries.length]);
+
+  const switchCompetition = async (id: string) => {
+    if (!myId || id === competitionId) return;
+    await supabase.from("juries").update({ competition_id: id }).eq("id", myId);
+    updateSession({ competitionId: id });
+    setSession(readSession());
+  };
 
   const createCompetition = async () => {
     const name = newComp.trim();
@@ -112,8 +138,36 @@ function PresidentPage() {
     updateSession({ competitionId: data.id });
     setSession(readSession());
     setNewComp("");
+    await loadMyComps();
     toast.success("Compétition créée avec les critères par défaut.");
   };
+
+  const deleteCompetition = async (id: string, name: string) => {
+    if (!confirm(`Supprimer la compétition « ${name} » et toutes ses données ?`))
+      return;
+    await supabase.from("scores").delete().eq("competition_id", id);
+    await supabase.from("criteria").delete().eq("competition_id", id);
+    await supabase.from("teams").delete().eq("competition_id", id);
+    await supabase
+      .from("juries")
+      .delete()
+      .eq("competition_id", id)
+      .eq("is_president", false);
+    if (myId)
+      await supabase
+        .from("juries")
+        .update({ competition_id: null })
+        .eq("id", myId)
+        .eq("competition_id", id);
+    await supabase.from("competitions").delete().eq("id", id);
+    if (id === competitionId) {
+      updateSession({ competitionId: null });
+      setSession(readSession());
+    }
+    await loadMyComps();
+    toast.success("Compétition supprimée");
+  };
+
 
   const renameCompetition = async (name: string) => {
     if (!competition) return;
@@ -195,10 +249,6 @@ function PresidentPage() {
     }
   };
 
-  const startNewCompetition = () => {
-    updateSession({ competitionId: null });
-    setSession(readSession());
-  };
 
   if (!ready || !session || session.role !== "jury" || !session.isPresident) {
     return (
@@ -259,15 +309,48 @@ function PresidentPage() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
-        {!competition ? (
-          <Card className="p-4">
-            <h2 className="text-sm font-semibold">Créer votre compétition</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Les critères par défaut seront ajoutés, vous pourrez les ajuster ensuite.
-            </p>
-            <div className="mt-3 flex flex-col gap-2 md:flex-row">
+        <Card className="p-4">
+          <h2 className="text-sm font-semibold">Mes compétitions</h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Créez-en autant que nécessaire et basculez d'une compétition à l'autre ;
+            chaque compétition a ses propres critères, équipes et jurés.
+          </p>
+          <div className="mt-3 space-y-2">
+            {myComps.map((c) => (
+              <div
+                key={c.id}
+                className={`flex items-center gap-2 rounded-md border p-2 ${
+                  c.id === competitionId ? "border-primary bg-primary/5" : ""
+                }`}
+              >
+                <span className="flex-1 text-sm">
+                  {c.name}
+                  {c.locked && (
+                    <span className="ml-2 inline-flex items-center gap-1 text-xs text-amber-600">
+                      <Lock className="h-3 w-3" /> clôturée
+                    </span>
+                  )}
+                </span>
+                {c.id === competitionId ? (
+                  <span className="text-xs font-medium text-primary">Active</span>
+                ) : (
+                  <Button size="sm" variant="outline" onClick={() => switchCompetition(c.id)}>
+                    Activer
+                  </Button>
+                )}
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => deleteCompetition(c.id, c.name)}
+                  aria-label="Supprimer la compétition"
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </div>
+            ))}
+            <div className="flex flex-col gap-2 pt-2 md:flex-row">
               <Input
-                placeholder="Ex. MARKETING DIGITAL COMPETITION"
+                placeholder="Nouvelle compétition (ex. MARKETING DIGITAL COMPETITION)"
                 value={newComp}
                 onChange={(e) => setNewComp(e.target.value)}
               />
@@ -275,13 +358,15 @@ function PresidentPage() {
                 <Plus className="mr-2 h-4 w-4" /> Créer
               </Button>
             </div>
-          </Card>
-        ) : (
+          </div>
+        </Card>
+
+        {!competition ? null : (
           <>
             <Card className="space-y-3 p-4">
               <div className="flex flex-col gap-2 md:flex-row md:items-end">
                 <div className="flex-1 space-y-1.5">
-                  <Label>Nom de la compétition</Label>
+                  <Label>Nom de la compétition active</Label>
                   <Input
                     key={competition.id}
                     defaultValue={competition.name}
@@ -290,12 +375,8 @@ function PresidentPage() {
                     }
                   />
                 </div>
-                {competition.locked && (
-                  <Button variant="outline" onClick={startNewCompetition}>
-                    <Plus className="mr-2 h-4 w-4" /> Nouvelle compétition
-                  </Button>
-                )}
               </div>
+
               <p className="text-xs text-muted-foreground">
                 Total maximum : {totalMax(criteria)} points
                 {competition.locked && (
