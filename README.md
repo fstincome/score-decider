@@ -1,6 +1,6 @@
-# ScoreDecider — Guide d'utilisation
+# JuryScore — Guide d'utilisation
 
-**ScoreDecider** est une application web de classement en temps réel conçue pour les compétitions, concours et jurys. Elle permet à un administrateur de créer des présidents de jury, à chaque président de gérer ses propres compétitions, équipes, critères et jurés, et aux jurés de soumettre leurs notes. Le classement final est calculé automatiquement et affiché publiquement.
+**JuryScore** est une application web de classement en temps réel conçue pour les compétitions, concours et jurys. Elle permet à un administrateur de créer des présidents de jury, à chaque président de gérer ses propres compétitions, équipes, critères et jurés, et aux jurés de soumettre leurs notes. Le classement final est calculé automatiquement et affiché publiquement.
 
 ---
 
