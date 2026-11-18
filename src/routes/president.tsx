@@ -265,7 +265,7 @@ function PresidentPage() {
         <div className="mx-auto flex max-w-5xl flex-col gap-3 px-6 py-6 md:flex-row md:items-center md:justify-between">
           <div>
             <Link to="/" className="text-xs opacity-80 hover:opacity-100">
-              <ArrowLeft className="mr-1 inline h-3 w-3" /> Classement public
+              <ArrowLeft className="mr-1 inline h-3 w-3" /> Accueil
             </Link>
             <h1 className="mt-1 text-2xl font-bold md:text-3xl">
               Espace président — {session.juryName}
@@ -309,6 +309,31 @@ function PresidentPage() {
       </header>
 
       <main className="mx-auto max-w-5xl space-y-6 px-6 py-8">
+        {competition && (
+          <Card className="flex flex-col gap-2 p-4 md:flex-row md:items-center md:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-sm font-semibold">Lien du classement (privé)</h2>
+              <p className="truncate text-xs text-muted-foreground">
+                {typeof window !== "undefined" ? window.location.origin : ""}/competition/{competition.id}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/competition/${competition.id}`);
+                  toast.success("Lien copié");
+                }}
+              >
+                Copier
+              </Button>
+              <Link to="/competition/$id" params={{ id: competition.id }}>
+                <Button size="sm">Ouvrir</Button>
+              </Link>
+            </div>
+          </Card>
+        )}
         <Card className="p-4">
           <h2 className="text-sm font-semibold">Mes compétitions</h2>
           <p className="mt-1 text-xs text-muted-foreground">

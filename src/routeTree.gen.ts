@@ -9,25 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as VoteRouteImport } from './routes/vote'
-import { Route as PresidentRouteImport } from './routes/president'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminRouteImport } from './routes/admin'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as PresidentRouteImport } from './routes/president'
+import { Route as VoteRouteImport } from './routes/vote'
+import { Route as CompetitionIdRouteImport } from './routes/competition.$id'
 
-const VoteRoute = VoteRouteImport.update({
-  id: '/vote',
-  path: '/vote',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PresidentRoute = PresidentRouteImport.update({
-  id: '/president',
-  path: '/president',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -35,9 +26,24 @@ const AdminRoute = AdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PresidentRoute = PresidentRouteImport.update({
+  id: '/president',
+  path: '/president',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VoteRoute = VoteRouteImport.update({
+  id: '/vote',
+  path: '/vote',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const CompetitionIdRoute = CompetitionIdRouteImport.update({
+  id: '/competition/$id',
+  path: '/competition/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -47,6 +53,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
+  '/competition/$id': typeof CompetitionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
+  '/competition/$id': typeof CompetitionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -62,13 +70,22 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/president': typeof PresidentRoute
   '/vote': typeof VoteRoute
+  '/competition/$id': typeof CompetitionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/admin' | '/login' | '/president' | '/vote'
+  fullPaths:
+    '/' | '/admin' | '/login' | '/president' | '/vote' | '/competition/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/login' | '/president' | '/vote'
-  id: '__root__' | '/' | '/admin' | '/login' | '/president' | '/vote'
+  to: '/' | '/admin' | '/login' | '/president' | '/vote' | '/competition/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/president'
+    | '/vote'
+    | '/competition/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -77,29 +94,16 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   PresidentRoute: typeof PresidentRoute
   VoteRoute: typeof VoteRoute
+  CompetitionIdRoute: typeof CompetitionIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/vote': {
-      id: '/vote'
-      path: '/vote'
-      fullPath: '/vote'
-      preLoaderRoute: typeof VoteRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/president': {
-      id: '/president'
-      path: '/president'
-      fullPath: '/president'
-      preLoaderRoute: typeof PresidentRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -109,11 +113,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/president': {
+      id: '/president'
+      path: '/president'
+      fullPath: '/president'
+      preLoaderRoute: typeof PresidentRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/vote': {
+      id: '/vote'
+      path: '/vote'
+      fullPath: '/vote'
+      preLoaderRoute: typeof VoteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/competition/$id': {
+      id: '/competition/$id'
+      path: '/competition/$id'
+      fullPath: '/competition/$id'
+      preLoaderRoute: typeof CompetitionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -125,6 +150,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   PresidentRoute: PresidentRoute,
   VoteRoute: VoteRoute,
+  CompetitionIdRoute: CompetitionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

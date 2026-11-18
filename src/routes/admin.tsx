@@ -1,3 +1,4 @@
+import { useCompetitions as useAllComps } from "@/lib/useCompetition";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useCallback, useEffect, useState } from "react";
 import { ArrowLeft, Lock, LogOut, Plus, ShieldCheck, Trash2 } from "lucide-react";
@@ -124,7 +125,7 @@ function AdminPage() {
         <div className="mx-auto flex max-w-4xl flex-col gap-3 px-6 py-6 md:flex-row md:items-center md:justify-between">
           <div>
             <Link to="/" className="text-xs opacity-80 hover:opacity-100">
-              <ArrowLeft className="mr-1 inline h-3 w-3" /> Classement public
+              <ArrowLeft className="mr-1 inline h-3 w-3" /> Accueil
             </Link>
             <h1 className="mt-1 text-2xl font-bold md:text-3xl">Administration</h1>
             <p className="text-xs opacity-90">
@@ -143,6 +144,7 @@ function AdminPage() {
         </div>
       </header>
 
+      <AllCompetitions />
       <main className="mx-auto max-w-4xl space-y-6 px-6 py-8">
         <Card className="p-4">
           <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -228,6 +230,27 @@ function AdminPage() {
           </div>
         </Card>
       </main>
+    </div>
+  );
+}
+
+function AllCompetitions() {
+  const { competitions } = useAllComps();
+  return (
+    <div className="mx-auto max-w-4xl px-6 pt-8">
+      <Card className="p-4">
+        <h2 className="text-sm font-semibold">Toutes les compétitions</h2>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {competitions.length === 0 && (
+            <span className="text-xs text-muted-foreground">Aucune compétition.</span>
+          )}
+          {competitions.map((c) => (
+            <Link key={c.id} to="/competition/$id" params={{ id: c.id }}>
+              <Button size="sm" variant="outline">{c.name}{c.locked ? " 🔒" : ""}</Button>
+            </Link>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }
